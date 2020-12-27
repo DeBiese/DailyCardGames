@@ -10,13 +10,15 @@ angular.module('Games')
         var nrOfScoresInserted;
         $scope.canInsertScore = true;
         resetScores();
+        if ($rootScope.game != null) {
+            $scope.player1 = $rootScope.game.players[0];
+            $scope.player2 = $rootScope.game.players[1];
+            $scope.player3 = $rootScope.game.players[2];
+            $scope.player4 = $rootScope.game.players[3];
+            $scope.scores = $rootScope.game.scores;
+            refreshScores();
+        }
         
-        $scope.player1 = $rootScope.game.players[0];
-        $scope.player2 = $rootScope.game.players[1];
-        $scope.player3 = $rootScope.game.players[2];
-        $scope.player4 = $rootScope.game.players[3];
-
-        $scope.scores = $rootScope.game.scores;
 
         $scope.checkCanInsertScore = function (nr)
         {
@@ -134,6 +136,24 @@ angular.module('Games')
             insertScoreInDB();
         };
 
+        $scope.error = function ()
+        {
+            $scope.newScore1 = 1;
+            $scope.newScore2 = 1;
+            $scope.newScore3 = 1;
+            $scope.newScore4 = 1;
+            if ($scope.player1.turn == $rootScope.selectedPlayerColor) {
+                $scope.newScore1 = -3;
+            } else if ($scope.player2.turn == $rootScope.selectedPlayerColor) {
+                $scope.newScore2 = -3;
+            } else if ($scope.player3.turn == $rootScope.selectedPlayerColor) {
+                $scope.newScore3 = -3;
+            } else {
+                $scope.newScore4 = -3;
+            }
+            insertScore();
+        }
+
         $scope.insertScore = function ()
         {
             insertScoreInDB();
@@ -145,6 +165,10 @@ angular.module('Games')
 
         $scope.stopGame = function () {
             $rootScope.game.active = 0;
+            $rootScope.game.players[0].won = false;
+            $rootScope.game.players[1].won = false;
+            $rootScope.game.players[2].won = false;
+            $rootScope.game.players[3].won = false;
             indexedDBDataSvc.updateGame($rootScope.game).then(function (data) {
                 $rootScope.game = null;
                 //check if there are at least 4 players, else redirect to home
@@ -170,7 +194,11 @@ angular.module('Games')
             if ($scope.newScore1 > 0 || $scope.newScore2 > 0 || $scope.newScore3 > 0 || $scope.newScore4 > 0) {
                 changeTurn();
             }
+            insertScore();
+            
+        };
 
+        function insertScore() {
             var score = [$scope.newScore1, $scope.newScore2, $scope.newScore3, $scope.newScore4];
 
             $scope.scores.push(score);
@@ -181,14 +209,35 @@ angular.module('Games')
             $rootScope.game.players[3] = $scope.player4;
 
             $rootScope.game.scores = $scope.scores;
-            indexedDBDataSvc.updateGame($rootScope.game).then(function ()
-            {
+            indexedDBDataSvc.updateGame($rootScope.game).then(function () {
                 refreshScores();
                 resetScores();
             }, function (err) {
                 console.log(err); //$window.alert(err);
             });
         };
+
+        function checkScore (player) {
+            var win = (player.total > $rootScope.game.maxScore - 1);
+            if (win == true) {
+                player.wins++;
+                indexedDBDataSvc.updatePlayer(player).then(function () {
+                }, function (err) {
+                    console.log(err); //$window.alert(err);
+                });
+                ShowPlayerWon(player);
+            }
+            else
+            {
+                player.won = false;
+            }
+            return win;
+        }
+
+        function ShowPlayerWon(player) {
+            //player.turn = "#FFD700";
+            player.won = true;
+        }
 
         function resetScores()
         {
@@ -231,35 +280,39 @@ angular.module('Games')
         function refreshScores()
         {
                 
-                //calculate totals
-                $scope.player1.total = 0;
-                $scope.player2.total = 0;
-                $scope.player3.total = 0;
-                $scope.player4.total = 0;
-                var i = 1;
+            //calculate totals
+            $scope.player1.total = 0;
+            $scope.player2.total = 0;
+            $scope.player3.total = 0;
+            $scope.player4.total = 0;
+            var i = 1;
 
-                $scope.scores.forEach(function (score) {
-                    console.log(score);
-                    if (score.counter ==  null || score.counter == 0)
-                    {
-                        score.counter = i;
-                        i++;
-                    }
-                    else
-                    {
-                        if (i <= score.counter) i = score.counter +1;
-                    }
-                   
-                    $scope.player1.total += parseInt(score[0]);
-                    $scope.player2.total += parseInt(score[1]);
-                    $scope.player3.total += parseInt(score[2]);
-                    $scope.player4.total += parseInt(score[3]);
-                });
-
-                if ($scope.scores != null) {
-                    $scope.scores = $scope.scores.sort(SortById);
+            $scope.scores.forEach(function (score)
+            {
+                console.log(score);
+                if (score.counter ==  null || score.counter == 0)
+                {
+                    score.counter = i;
+                    i++;
                 }
-            
+                else
+                {
+                    if (i <= score.counter) i = score.counter +1;
+                }
+                   
+                $scope.player1.total += parseInt(score[0]);
+                $scope.player2.total += parseInt(score[1]);
+                $scope.player3.total += parseInt(score[2]);
+                $scope.player4.total += parseInt(score[3]);
+            });
+
+            if ($scope.scores != null) {
+                $scope.scores = $scope.scores.sort(SortById);
+            }
+            checkScore($scope.player1);
+            checkScore($scope.player2);
+            checkScore($scope.player3);
+            checkScore($scope.player4);
         };
 
         //This will sort your array
@@ -268,7 +321,5 @@ angular.module('Games')
             var scoreB = b.counter;
             return ((scoreA > scoreB) ? -1 : ((scoreA < scoreB) ? 1 : 0));
         };
-
-        refreshScores();
 
     }]);
